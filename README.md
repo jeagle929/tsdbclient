@@ -1,6 +1,6 @@
 # tsdbclient
 
-tsdb client helper that support TDengine
+tsdb client helper that support TDengine with http
 
 # Quick Start
 
