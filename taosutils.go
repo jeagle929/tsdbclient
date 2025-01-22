@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	tdengineTimeStampFormat = "2006-01-02T15:04:05.999999999Z"
-	tdenginePollTimeoutMs   = 5000
+	tsdbTimeStampFormat = "2006-01-02T15:04:05.999999999Z"
+	taosPollTimeoutMs   = 5000
 )
 
 var (
@@ -107,7 +107,7 @@ func (client *tsdbClient) QueryData(sql string, convertNumber bool) (result []ma
 					case "FLOAT", "DOUBLE":
 						row[cn], _ = r[i].(json.Number).Float64()
 					case "TIMESTAMP":
-						if ts, ee := time.Parse(tdengineTimeStampFormat, r[i].(string)); ee == nil {
+						if ts, ee := time.Parse(tsdbTimeStampFormat, r[i].(string)); ee == nil {
 							row[cn] = ts.Unix()
 						} else {
 							row[cn] = 0
@@ -199,7 +199,7 @@ func (client *tsdbClient) Subscribe(ctx context.Context, topic string, chMessage
 					}
 					return
 				default:
-					if ev := tsdbCons.Poll(tdenginePollTimeoutMs); ev != nil {
+					if ev := tsdbCons.Poll(taosPollTimeoutMs); ev != nil {
 						switch e := ev.(type) {
 						case TSDBSubscribedMessage:
 							select {
