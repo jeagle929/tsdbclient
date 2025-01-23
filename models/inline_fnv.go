@@ -1,4 +1,4 @@
-package tsdbclient
+package models
 
 // from stdlib hash/fnv/fnv.go
 const (

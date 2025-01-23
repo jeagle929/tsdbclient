@@ -1,4 +1,4 @@
-package tsdbclient
+package models
 
 // Helper time methods since parsing time can easily overflow and we only support a
 // specific time range.

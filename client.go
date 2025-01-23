@@ -14,6 +14,8 @@ import (
 	"net/url"
 	"path"
 	"time"
+
+	"github.com/jeagle929/tsdbclient/models"
 )
 
 type ContentEncoding string
@@ -262,7 +264,7 @@ func (bp *batchpoints) SetRetentionPolicy(rp string) {
 
 // DataPoint represents a single data point.
 type DataPoint struct {
-	pt Point
+	pt models.Point
 }
 
 // NewDataPoint returns a point with the given timestamp. If a timestamp is not
@@ -280,7 +282,7 @@ func NewDataPoint(
 		T = t[0]
 	}
 
-	pt, err := NewPoint(name, NewTags(tags), fields, T)
+	pt, err := models.NewPoint(name, models.NewTags(tags), fields, T)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +328,7 @@ func (p *DataPoint) Fields() (map[string]interface{}, error) {
 }
 
 // NewPointFrom returns a point from the provided models.Point.
-func NewPointFrom(pt Point) *DataPoint {
+func NewPointFrom(pt models.Point) *DataPoint {
 	return &DataPoint{pt: pt}
 }
 

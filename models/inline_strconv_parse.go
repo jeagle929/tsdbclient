@@ -1,4 +1,4 @@
-package tsdbclient
+package models
 
 import (
 	"reflect"

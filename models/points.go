@@ -1,4 +1,4 @@
-package tsdbclient
+package models
 
 import (
 	"bytes"
@@ -13,6 +13,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/jeagle929/tsdbclient/pkg/escape"
 )
 
 type escapeSet struct {
@@ -1451,7 +1453,7 @@ func (p *point) name() []byte {
 }
 
 func (p *point) Name() []byte {
-	return Unescape(p.name())
+	return escape.Unescape(p.name())
 }
 
 // SetName updates the measurement name for the point.
@@ -2195,8 +2197,8 @@ func (p *point) Next() bool {
 	}
 
 	p.it.end, p.it.key = scanTo(p.fields, p.it.start, '=')
-	if IsEscaped(p.it.key) {
-		p.it.keybuf = AppendUnescaped(p.it.keybuf[:0], p.it.key)
+	if escape.IsEscaped(p.it.key) {
+		p.it.keybuf = escape.AppendUnescaped(p.it.keybuf[:0], p.it.key)
 		p.it.key = p.it.keybuf
 	}
 
@@ -2320,7 +2322,7 @@ func (p Fields) MarshalBinary() []byte {
 }
 
 func appendField(b []byte, k string, v interface{}) []byte {
-	b = append(b, []byte(String0(k))...)
+	b = append(b, []byte(escape.String0(k))...)
 	b = append(b, '=')
 
 	// check popular types first
