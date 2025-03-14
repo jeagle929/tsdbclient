@@ -20,12 +20,14 @@ import (
 func main() {
 	fmt.Println("This is a example")
 	
-	res, err := tsdbclient.QueryData("select d from `dma_report_on`")
+	cols, res, err := tsdbclient.QueryData("select d from `dma_report_on`")
 	if err != nil {
 		// handle error
+		fmt.Println(err)
+		return
     }
 	
-	fmt.Printf("query data result: %+v\n", res)
+	fmt.Printf("query data result: %+v, %v\n", res, cols)
 	
 	fmt.Println("OK")
 	
