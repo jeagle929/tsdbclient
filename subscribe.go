@@ -24,7 +24,7 @@ type TSDBSubscribedMessage interface {
 	Topic() string
 	DBName() string
 	Value() interface{}
-	Offset() int64
+	Offset() tmqcommon.Offset
 }
 
 type TSDBSubscribeConsumer interface {
