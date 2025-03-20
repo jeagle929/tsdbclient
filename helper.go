@@ -45,6 +45,8 @@ type tsdbClient struct {
 
 	consumers map[string]TSDBSubscribeConsumer
 	lockRW    sync.RWMutex
+
+	defaultNumberValue interface{}
 }
 
 func NewTDEngineClient(opts ...DBOption) TSDBClient {
@@ -56,7 +58,8 @@ func NewTDEngineClient(opts ...DBOption) TSDBClient {
 	}
 
 	cli := &tsdbClient{
-		consumers: make(map[string]TSDBSubscribeConsumer),
+		consumers:          make(map[string]TSDBSubscribeConsumer),
+		defaultNumberValue: dbOpt.DefaultNumberValue,
 	}
 	cli.httpClient, cli.initialErr = NewHTTPClient(config)
 	cli.dbConfig.DBAddr = dbOpt.DatabaseAddr
@@ -103,9 +106,19 @@ func (client *tsdbClient) QueryData(sql string, convertNumber bool) (result []ma
 				if convertNumber {
 					switch c[1].(string) {
 					case "BIGINT", "INT", "TINYINT", "SMALLINT", "TINYINT UNSIGNED", "SMALLINT UNSIGNED", "INT UNSIGNED", "BIGINT UNSIGNED":
-						row[cn], _ = r[i].(json.Number).Int64()
+						if num, ok := r[i].(json.Number); ok {
+							row[cn], _ = num.Int64()
+						} else {
+							row[cn] = client.defaultNumberValue
+						}
+						//row[cn], _ = r[i].(json.Number).Int64()
 					case "FLOAT", "DOUBLE":
-						row[cn], _ = r[i].(json.Number).Float64()
+						if num, ok := r[i].(json.Number); ok {
+							row[cn], _ = num.Float64()
+						} else {
+							row[cn] = client.defaultNumberValue
+						}
+						//row[cn], _ = r[i].(json.Number).Float64()
 					case "TIMESTAMP":
 						if ts, ee := time.Parse(tsdbTimeStampFormat, r[i].(string)); ee == nil {
 							row[cn] = ts.Unix()
@@ -208,7 +221,6 @@ func (client *tsdbClient) Subscribe(ctx context.Context, topic string, chMessage
 								log.Println("[taosutils] Subscribe chan message full")
 							}
 						case error:
-							//case tmqcommon.Error:
 							log.Printf("tmq error: %v\n", e)
 							//close(chMessage)
 							return

@@ -14,6 +14,8 @@ type DbOptions struct {
 
 	ConvertNumber bool
 	Timestamp     int64
+
+	DefaultNumberValue interface{}
 }
 
 type DBOption func(*DbOptions)
@@ -58,6 +60,16 @@ func Timestamp(ts int64) DBOption {
 	return func(dbOpts *DbOptions) {
 		dbOpts.Timestamp = ts
 	}
+}
+
+func DefaultNumberValue[T Number](v T) DBOption {
+	return func(options *DbOptions) {
+		options.DefaultNumberValue = v
+	}
+}
+
+type Number interface {
+	int | float64
 }
 
 const (
