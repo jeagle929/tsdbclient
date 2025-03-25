@@ -43,8 +43,8 @@ type tsdbClient struct {
 	}
 	initialErr error
 
-	consumers map[string]TSDBSubscribeConsumer
-	lockRW    sync.RWMutex
+	//consumers map[string]TSDBSubscribeConsumer
+	//lockRW    sync.RWMutex
 
 	defaultNumberValue interface{}
 }
@@ -58,7 +58,7 @@ func NewTDEngineClient(opts ...DBOption) TSDBClient {
 	}
 
 	cli := &tsdbClient{
-		consumers:          make(map[string]TSDBSubscribeConsumer),
+		//consumers:          make(map[string]TSDBSubscribeConsumer),
 		defaultNumberValue: dbOpt.DefaultNumberValue,
 	}
 	cli.httpClient, cli.initialErr = NewHTTPClient(config)
@@ -176,94 +176,92 @@ func (client *tsdbClient) WriteData(ts int64, name string, tags map[string]strin
 }
 
 func (client *tsdbClient) Subscribe(ctx context.Context, topic string, chMessage chan<- TSDBSubscribedMessage) error {
+	return client.subscribe(ctx, topic, chMessage)
+}
 
-	client.lockRW.Lock()
-	defer client.lockRW.Unlock()
+func (client *tsdbClient) subscribe(ctx context.Context, topic string, chMessage chan<- TSDBSubscribedMessage) error {
 
-	if _, ok := client.consumers[topic]; ok {
-		log.Printf("alread subscribed topic: %s\n", topic)
-		return nil
+	if len(topic) == 0 {
+		return errors.New("invalid args: topic is empty")
+	}
+
+	if chMessage == nil {
+		return errors.New("invalid args: chMessage is nil")
 	}
 
 	tsdbCons, err := newConsumer(client.dbConfig.DBAddr, client.dbConfig.DBUser, client.dbConfig.DBPass, topic)
 	if err != nil {
 		return err
 	}
-
-	client.consumers[topic] = tsdbCons
+	defer tsdbCons.Close()
 
 	err = tsdbCons.Subscribe(topic, nil)
 	if err != nil {
 		return err
 	}
+	defer tsdbCons.Unsubscribe()
 
-	if chMessage != nil {
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					log.Println("timeout to ready unsubscribe...")
-					if e := tsdbCons.Unsubscribe(); e != nil {
-						log.Printf("unsubscribe error: %v\n", e)
-					} else {
-						log.Println("unsubscribe success.")
-						close(chMessage)
-						log.Println("receive channel closed")
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("[tsdbclient] Subscribe timeout to ready unsubscribe...")
+			if e := tsdbCons.Unsubscribe(); e != nil {
+				log.Printf("[tsdbclient] Subscribe unsubscribe error: %v\n", e)
+				return e
+			} else {
+				log.Println("[tsdbclient] Subscribe unsubscribe success.")
+				close(chMessage)
+				log.Println("[tsdbclient] Subscribe receive channel closed")
+			}
+			return nil
+		default:
+			if ev := tsdbCons.Poll(taosPollTimeoutMs); ev != nil {
+				switch e := ev.(type) {
+				case TSDBSubscribedMessage:
+					select {
+					case chMessage <- e:
+					default:
+						log.Println("[tsdbclient] Subscribe chan message full")
 					}
-					return
+				case error:
+					log.Printf("[tsdbclient] Subscribe tmq error: %v\n", e)
+					//close(chMessage)
+					return e
 				default:
-					if ev := tsdbCons.Poll(taosPollTimeoutMs); ev != nil {
-						switch e := ev.(type) {
-						case TSDBSubscribedMessage:
-							select {
-							case chMessage <- e:
-							default:
-								log.Println("[taosutils] Subscribe chan message full")
-							}
-						case error:
-							log.Printf("tmq error: %v\n", e)
-							//close(chMessage)
-							return
-						default:
-							log.Printf("[datanalysis] Subscribe not expected receive type: %T\n", e)
-						}
-					}
+					log.Printf("[tsdbclient] Subscribe not expected receive type: %T\n", e)
 				}
 			}
-		}()
+		}
 	}
 
-	return err
 }
 
+// Deprecated: replace with subscribe args ctx
 func (client *tsdbClient) UnSubscribe(topic string) error {
-
-	if len(topic) == 0 {
-		return errors.New("invalid args: topic")
-	}
-
-	client.lockRW.Lock()
-	defer client.lockRW.Unlock()
-
-	if cs, ok := client.consumers[topic]; ok {
-		cs.Unsubscribe()
-		cs.Close()
-		delete(client.consumers, topic)
-	}
-
+	//if len(topic) == 0 {
+	//	return errors.New("invalid args: topic is empty")
+	//}
+	//
+	//client.lockRW.Lock()
+	//defer client.lockRW.Unlock()
+	//
+	//if cs, ok := client.consumers[topic]; ok {
+	//	cs.Unsubscribe()
+	//	cs.Close()
+	//	delete(client.consumers, topic)
+	//}
 	return nil
 }
 
 // Close releases any resources a Client may be using.
 func (client *tsdbClient) Close() error {
-	client.lockRW.Lock()
-	defer client.lockRW.Unlock()
-	for _, v := range client.consumers {
-		v.Unsubscribe()
-		v.Close()
-	}
-	clear(client.consumers)
-
+	//client.lockRW.Lock()
+	//defer client.lockRW.Unlock()
+	//for _, v := range client.consumers {
+	//	v.Unsubscribe()
+	//	v.Close()
+	//}
+	//clear(client.consumers)
 	return client.httpClient.Close()
 }
 

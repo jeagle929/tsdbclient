@@ -2,6 +2,7 @@ package tsdbclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -27,14 +28,14 @@ type TSDBSubscribedMessage interface {
 	Offset() tmqcommon.Offset
 }
 
-type TSDBSubscribeConsumer interface {
+type taosConsumer interface {
 	Subscribe(topic string, rebalanceCb tmq.RebalanceCb) error
 	Poll(timeoutMs int) tmqcommon.Event
 	Unsubscribe() error
 	Close() error
 }
 
-func newConsumer(dbAddr, dbUser, dbPass, topic string) (consumer TSDBSubscribeConsumer, err error) {
+func newConsumer(dbAddr, dbUser, dbPass, topic string) (consumer taosConsumer, err error) {
 
 	hn, _ := os.Hostname()
 
@@ -52,13 +53,17 @@ func newConsumer(dbAddr, dbUser, dbPass, topic string) (consumer TSDBSubscribeCo
 	return
 }
 
-func Subscribe(ctx context.Context, topic string, chMessage chan<- TSDBSubscribedMessage) error {
-	return clientWrapper.Subscribe(ctx, topic, chMessage)
+func Subscribe(ctx context.Context, topic string, chMessage chan<- TSDBSubscribedMessage, chError chan<- error) error {
+	go func() {
+		chError <- clientWrapper.Subscribe(ctx, topic, chMessage)
+	}()
+	return nil
 }
 
-func CreateTopic(topic string, content string, mode TopicMode) error {
+func CreateTopic(topic, content string, mode TopicMode) error {
+
 	if len(topic) == 0 || len(content) == 0 {
-		return fmt.Errorf("miss args: `topic` or `content`")
+		return errors.New("miss args: `topic` or `content`")
 	}
 
 	var sql string
@@ -80,8 +85,9 @@ func CreateTopic(topic string, content string, mode TopicMode) error {
 }
 
 func DropTopic(topic string) error {
+
 	if len(topic) == 0 {
-		return fmt.Errorf("miss args: `topic`")
+		return fmt.Errorf("invalid args: `topic` is empty")
 	}
 
 	_, err := ReadData(fmt.Sprintf("drop topic if exists %s", topic))
