@@ -26,6 +26,7 @@ type TSDBClient interface {
 
 	QueryData(string, bool) ([]map[string]interface{}, error)
 	WriteData(int64, string, map[string]string, map[string]interface{}) error
+	WriteDataBatch([]int64, []string, []map[string]string, []map[string]interface{}) error
 	Close() error
 
 	Subscribe(ctx context.Context, topic string, chMessage chan<- TSDBSubscribedMessage) error
@@ -168,6 +169,49 @@ func (client *tsdbClient) WriteData(ts int64, name string, tags map[string]strin
 			return err
 		} else {
 			bps.AddPoint(pt)
+		}
+	}
+
+	return client.httpClient.Write(bps)
+
+}
+
+func (client *tsdbClient) WriteDataBatch(times []int64, names []string, tags []map[string]string, fields []map[string]interface{}) error {
+
+	if l := len(times); l != len(names) && l != len(tags) && l != len(fields) {
+		return errors.New("invalid args: not match")
+	}
+
+	bps, _ := NewBatchPoints(BatchPointsConfig{
+		Precision: client.dbConfig.Precision,
+		Database:  client.dbConfig.DBName,
+	})
+
+	for i := 0; i < len(times); i++ {
+		ts := times[i]
+		if ts > 0 {
+			var t time.Time
+			switch client.dbConfig.Precision {
+			case "s":
+				t = time.Unix(ts, 0)
+			case "us":
+				t = time.UnixMicro(ts)
+			case "ns":
+				t = time.Unix(0, ts)
+			default: // ms
+				t = time.UnixMilli(ts)
+			}
+			if pt, err := NewDataPoint(names[i], tags[i], fields[i], t); err != nil {
+				return err
+			} else {
+				bps.AddPoint(pt)
+			}
+		} else {
+			if pt, err := NewDataPoint(names[i], tags[i], fields[i]); err != nil {
+				return err
+			} else {
+				bps.AddPoint(pt)
+			}
 		}
 	}
 
