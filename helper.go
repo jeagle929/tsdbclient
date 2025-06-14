@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jeagle929/tsdbclient/models"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,11 +28,12 @@ type TSDBClient interface {
 
 	QueryData(string, bool) ([]map[string]interface{}, error)
 	WriteData(int64, string, map[string]string, map[string]interface{}) error
-	WriteDataBatch([]int64, []string, []map[string]string, []map[string]interface{}) error
 	Close() error
 
 	Subscribe(ctx context.Context, topic string, chMessage chan<- TSDBSubscribedMessage) error
 	UnSubscribe(topic string) error
+
+	WriteDataBatch(points models.Points) error
 }
 
 type tsdbClient struct {
@@ -149,16 +152,30 @@ func (client *tsdbClient) WriteData(ts int64, name string, tags map[string]strin
 
 	if ts > 0 {
 		var t time.Time
-		switch client.dbConfig.Precision {
-		case "s":
+		//switch client.dbConfig.Precision {
+		//case "s":
+		//	t = time.Unix(ts, 0)
+		//case "us":
+		//	t = time.UnixMicro(ts)
+		//case "ns":
+		//	t = time.Unix(0, ts)
+		//default: // ms
+		//	t = time.UnixMilli(ts)
+		//}
+		tsDigitCount := len(strconv.FormatInt(ts, 10))
+		switch tsDigitCount {
+		case 10: // s
 			t = time.Unix(ts, 0)
-		case "us":
-			t = time.UnixMicro(ts)
-		case "ns":
-			t = time.Unix(0, ts)
-		default: // ms
+		case 13: // ms
 			t = time.UnixMilli(ts)
+		case 16: // us
+			t = time.UnixMicro(ts)
+		case 19: // ns
+			t = time.Unix(0, ts)
+		default:
+			return fmt.Errorf("invalid timestamp %d, valid digit range: [3|10-19]", ts)
 		}
+
 		if pt, err := NewDataPoint(name, tags, fields, t); err != nil {
 			return err
 		} else {
@@ -176,51 +193,24 @@ func (client *tsdbClient) WriteData(ts int64, name string, tags map[string]strin
 
 }
 
-func (client *tsdbClient) WriteDataBatch(times []int64, names []string, tags []map[string]string, fields []map[string]interface{}) error {
-
-	if l := len(times); l != len(names) && l != len(tags) && l != len(fields) {
-		return errors.New("invalid args: not match")
-	}
-
-	bps, _ := NewBatchPoints(BatchPointsConfig{
-		Precision: client.dbConfig.Precision,
-		Database:  client.dbConfig.DBName,
-	})
-
-	for i := 0; i < len(times); i++ {
-		ts := times[i]
-		if ts > 0 {
-			var t time.Time
-			switch client.dbConfig.Precision {
-			case "s":
-				t = time.Unix(ts, 0)
-			case "us":
-				t = time.UnixMicro(ts)
-			case "ns":
-				t = time.Unix(0, ts)
-			default: // ms
-				t = time.UnixMilli(ts)
-			}
-			if pt, err := NewDataPoint(names[i], tags[i], fields[i], t); err != nil {
-				return err
-			} else {
-				bps.AddPoint(pt)
-			}
-		} else {
-			if pt, err := NewDataPoint(names[i], tags[i], fields[i]); err != nil {
-				return err
-			} else {
-				bps.AddPoint(pt)
-			}
-		}
-	}
-
-	return client.httpClient.Write(bps)
-
-}
-
 func (client *tsdbClient) Subscribe(ctx context.Context, topic string, chMessage chan<- TSDBSubscribedMessage) error {
 	return client.subscribe(ctx, topic, chMessage)
+}
+
+func (client *tsdbClient) WriteDataBatch(points models.Points) error {
+	if points != nil && points.Len() > 0 {
+		bps, _ := NewBatchPoints(BatchPointsConfig{
+			Precision: client.dbConfig.Precision,
+			Database:  client.dbConfig.DBName,
+		})
+
+		for _, point := range points {
+			bps.AddPoint(NewPointFrom(point))
+		}
+
+		return client.httpClient.Write(bps)
+	}
+	return nil
 }
 
 func (client *tsdbClient) subscribe(ctx context.Context, topic string, chMessage chan<- TSDBSubscribedMessage) error {
